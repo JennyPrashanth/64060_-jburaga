@@ -1,0 +1,216 @@
+---
+title: "FML Assignment 2"
+output: html_document
+date: "2023-09-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# First we need to load various libraries required to perform our analysis
+```{r}
+library(caret)
+library(class)
+library(dplyr)
+```
+
+# Load the dataset
+```{r}
+bank_data <- read.csv("C:/Users/ssim/OneDrive/Desktop/R Programming/FML/Assignment 2/UniversalBank.csv")
+```
+
+# Also we need to transform the education variable into a set of 3 dummy variables
+```{r}
+bank_data$education_1 <- ifelse(bank_data$Education == 1, 1, 0)
+bank_data$education_2 <- ifelse(bank_data$Education == 2, 1, 0)
+bank_data$education_3 <- ifelse(bank_data$Education == 3, 1, 0)
+bank_data$acceptance <- ifelse(bank_data$Personal.Loan == 1, 1, 0)
+bank_data.1 <- bank_data %>% 
+  select(Age, Experience, Income, Family, CCAvg, Mortgage,Securities.Account, CD.Account, Online, CreditCard, education_1, education_2, education_3, acceptance)
+```
+
+# Partition the dataset into Training(60%) and Validation(40%) datasets
+```{r}
+set.seed(1234)  #this should be used for reproducibility
+partition_index <- createDataPartition(bank_data$acceptance,
+                                      p=0.6, list=F)
+training_data <- bank_data.1[partition_index,]
+validation_data <- bank_data.1[-partition_index, ]
+summary(training_data$acceptance)
+summary(validation_data$acceptance)
+```
+# Let us Normalize the data
+```{r}
+training.norm.df <- training_data
+validation.norm.df <- validation_data
+traval.norm.df <- bank_data.1
+```
+
+# Using Preprocess function to normalize the data
+```{r}
+nrmlzd.values <- preProcess(training_data[, 1:6], method=c("center","scale"))
+training.norm.df[, 1:6] <- predict(nrmlzd.values, training_data[, 1:6])
+validation.norm.df[, 1:6] <- predict(nrmlzd.values, validation_data[, 1:6])
+traval.norm.df[, 1:6] <- predict(nrmlzd.values, traval.norm.df[, 1:6])
+summary(training.norm.df)
+var(training.norm.df[, 1:6])
+summary(validation.norm.df)
+var(validation.norm.df[, 1:6])
+```
+# Let us know train the K-nn
+```{r}
+set.seed(1234) #used to reproduce the results
+knn_1 <- train(as.factor(acceptance) ~ Age + Experience + Income +
+                 Family + CCAvg + education_1 + education_2 
+               + education_3 + Mortgage + Securities.Account + 
+                 CD.Account + Online + CreditCard,
+                data = training.norm.df, method = "knn")
+print(knn_1)
+```
+# Testing the model with new dataframe with given customer details in order to predict 
+```{r}
+cust.df <- data.frame(Age = as.integer(40), 
+           Experience = as.integer(10), Income = as.integer(84), 
+           Family = as.integer(2), CCAvg = as.integer(2), Mortgage =             as.integer(0), `Securities Account` = as.integer(0),
+           `CD   Account` = as.integer(0), Online = as.integer(1),  
+           CreditCard = as.integer(1), education_1 = as.integer(0),
+           education_2 = as.integer(1), education_3 = as.integer(0))
+           
+cust.df[, 1:6] <- predict(nrmlzd.values, cust.df[, 1:6])
+
+knn_2 <- knn(train = training.norm.df[, 1:13, drop = F], 
+             test = cust.df[, 1:13, drop = F],
+             cl = training.norm.df$acceptance, k=1)
+print(knn_2)
+```
+# The above result indicates that the customer level is 0 which in turn means that loan is not accepted.
+
+# Finding k which is provides best balance of overfitting and underfitting
+```{r}
+accu.df <- data.frame(k = seq(1, 14, 1), accuracy = rep(0, 14))
+
+for(n in 1:14) {# loop through
+  model.1 <- knn(train = training.norm.df[, 1:13, drop = F], test = 
+                   validation.norm.df[, 1:13, drop = F], cl =
+                   as.factor(training.norm.df$acceptance), k=n)
+  accu.df[n, 2] <- confusionMatrix(model.1,                                   as.factor(validation.norm.df$acceptance))$overall[1]
+  #confusion matrix    
+}
+accu.df
+```
+# out of the above results for k, we find that when k=3 the accuracy is 96.1% which is the highest among the 10 best k's. So, we will use k=3 for the test set.
+
+# Let us now generate confusion matrix for k=3
+```{r}
+model.2 <- knn(train = training.norm.df[, 1:13, drop = F], test =
+                 validation.norm.df[, 1:13, drop = F], cl =
+                 as.factor(training.norm.df$acceptance), k=3, prob =
+                 T)
+confusionMatrix(model.2, as.factor(validation.norm.df$acceptance))
+```
+# Confusion matrix shows that the model is 96.1% accurate. Also, the model has a sensitivity of 99.61%. While the precision comes out to be only 63.78% which is a bit low.
+
+# Let us now test the data into a new dataframe with given customer details.
+```{r}
+cust.df1 <- data.frame(Age = as.integer(40), 
+           Experience = as.integer(10), Income = as.integer(84), 
+           Family = as.integer(2), CCAvg = as.integer(2), Mortgage =             as.integer(0), `Securities Account` = as.integer(0),
+           `CD   Account` = as.integer(0), Online = as.integer(1),  
+           CreditCard = as.integer(1), education_1 = as.integer(0),
+           education_2 = as.integer(1), education_3 = as.integer(0))
+
+cust.df1[, 1:6] <- predict(nrmlzd.values, cust.df1[, 1:6])
+
+model.3 <- knn(train = training.norm.df[, 1:13, drop = F], test =
+                 cust.df1[, 1:13, drop = F], cl =
+                 as.factor(training.norm.df$acceptance), k=3, prob =
+                 T)
+print(model.3)
+```
+# The customer level comes out to "0" even this time which means that the loan will not be accepted.
+
+# Let us now split the data into Training, validation and testing in 50%, 30% & 20% respectively.
+```{r}
+n_bank <- bank_data %>% 
+          select(Age, Experience, Income, Family, CCAvg,
+                 Mortgage,Securities.Account, CD.Account, Online,
+                 CreditCard, education_1, education_2, education_3,
+                 acceptance)
+set.seed(1234)
+testing_index = createDataPartition(n_bank$acceptance, p = 0.2, list
+                                    = FALSE)
+testing_data = n_bank[testing_index,]
+traval_data = n_bank[-testing_index,]
+training_index.2 = createDataPartition(traval_data$acceptance, p = 0.50, list=FALSE)
+training_data.2 = traval_data[training_index.2,]
+validation_data.2 = traval_data[-training_index.2,]
+
+summary(training_data.2)
+summary(validation_data.2)
+summary(testing_data)
+```
+
+# Now let us again normalize the data following the similar steps we followed above.
+```{r}
+training.norm.df2 <- training_data.2
+validation.norm.df2 <- validation_data.2
+traval.norm.df2 <- traval_data
+testing.norm.df2 <- testing_data
+```
+# we will normalize two columns which are 'Sales' & 'Age'
+```{r}
+nrmlzd.values <- preProcess(training_data.2[, 1:6],
+                            method=c("center", "scale"))
+training.norm.df2[, 1:6] <- predict(nrmlzd.values, training_data.2
+                                    [, 1:6])
+validation.norm.df2[, 1:6] <- predict(nrmlzd.values,
+                                      validation_data.2[, 1:6])
+traval.norm.df2[, 1:6] <- predict(nrmlzd.values, 
+                                  traval.norm.df2[, 1:6])
+testing.norm.df2[, 1:6] <- predict(nrmlzd.values, 
+                                   testing_data[, 1:6])
+summary(training.norm.df2)
+var(training.norm.df2[, 1:6])
+summary(validation.norm.df2)
+var(validation.norm.df2[, 1:6])
+```
+
+# Let us now combine and normalize Training & Validation sets before we predict for the testing set.
+```{r}
+nrmlzd.values <- preProcess(traval_data[, 1:6], 
+                            method=c("center", "scale"))
+traval.norm.df2[, 1:6] <- predict(nrmlzd.values, traval_data[, 1:6])
+testing.norm.df2[, 1:6] <- predict(nrmlzd.values, 
+                                   testing_data[, 1:6])
+summary(traval.norm.df2)
+summary(testing.norm.df2)
+```
+# Let us know predict by generating confusion matrix for Training, validation & testing sets.
+```{r}
+model_training <- knn(train = training.norm.df2[, 1:13],
+                      test = training.norm.df2[, 1:13],
+                  cl = training.norm.df2$acceptance, k = 3)
+
+model_validation <- knn(train = training.norm.df2[, 1:13],
+                        test = validation.norm.df2[,1:13], 
+               cl = training.norm.df2$acceptance, k = 3)
+
+model_testing <- knn(train = training.norm.df2[,1:13],
+                     test = testing.norm.df2[, 1:13],
+                cl = training.norm.df2$acceptance, k = 3)
+
+confusionMatrix(model_training, 
+                as.factor(training.norm.df2$acceptance))
+confusionMatrix(model_validation,
+                as.factor(validation.norm.df2$acceptance))
+confusionMatrix(model_testing,
+                as.factor(testing.norm.df2$acceptance))
+```
+
+# Hence, we can see the Accuracy, Sensitivity & Precision for Training, Validation & Testing sets respectively.
+
+# From the above results, we can say that Validation set has highest values of Accuracy, Sensitivity & Precision. This is mainly because the data was trained on the training set.
+
+
+
