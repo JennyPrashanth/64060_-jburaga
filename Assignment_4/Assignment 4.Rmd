@@ -1,0 +1,144 @@
+---
+title: "FML Assignment 4"
+author: "Jenny Prashanth Buraga"
+output: html_document
+date: "2023-10-28"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load the dataset and libraries required
+```{r}
+data <- read.csv("C:/Users/ssim/OneDrive/Desktop/Rhistory/Pharmaceuticals.csv")
+library(tidyverse)
+library(factoextra)
+library(ggplot2)
+library(gridExtra)
+library(cluster)
+```
+# Clean the dataset
+```{r}
+str(data)
+data <- na.omit(data)
+```
+
+# a. Selecting 9 columns of Numerical variables of the 21 firms in the
+dataset which are from column 3 to 11.
+```{r}
+row.names(data) <- data[,1]
+numeric_data <- data[,3:11]
+head(numeric_data)
+```
+# Using scale function to normalize the data
+```{r}
+scaled_numeric <- scale(numeric_data)
+head(scaled_numeric)
+```
+# Let us perform K-means clustering using multiple values of k and examine the difference in results.
+```{r}
+kmeans_1 <- kmeans(scaled_numeric, centers = 2, nstart = 30)
+kmeans_2 <- kmeans(scaled_numeric, centers = 5, nstart = 30)
+kmeans_3 <- kmeans(scaled_numeric, centers = 6, nstart = 30)
+Plot_1 <- fviz_cluster(kmeans_1, data = scaled_numeric)+ggtitle("k=2")
+Plot_2 <- fviz_cluster(kmeans_2, data = scaled_numeric)+ggtitle("k=5")
+Plot_3 <- fviz_cluster(kmeans_3, data = scaled_numeric)+ggtitle("k=6")
+grid.arrange(Plot_1,Plot_2,Plot_3, nrow=2)
+```
+# Let us now determine optimal clusters using elbow method
+```{r}
+elb_dist <- dist(scaled_numeric, method = "euclidean")
+fviz_dist(elb_dist)
+```
+# Now, we have to calculate the within-cluster sum of sqaures (wss) values for each k value. 
+```{r}
+set.seed(123)
+wss <- function(k){kmeans(scaled_numeric,k,nstart = 10)$tot.withinss
+}
+kvalues <- 1:10
+wss_clusters <- map_dbl(kvalues,wss)
+plot(kvalues,wss_clusters, type = "b", pch = 16, frame = T,
+     xlab = "Number of clusters",
+     ylab = "Total WSS")
+```
+# The location of the bend in the plot indicates the optimum number of
+clusters, so k=5. We will use 5 clusters to perform our final analysis and visualize the results.
+```{r}
+set.seed(123)
+final_analysis <- kmeans(scaled_numeric,5,nstart = 25)
+print(final_analysis)
+```
+# Cluster Plot
+```{r}
+fviz_cluster(final_analysis, data = scaled_numeric) 
+```
+# Summary and Cluster plot
+```{r}
+numeric_data %>%
+  mutate(cluster=final_analysis$cluster) %>%
+  group_by(cluster) %>% summarise_all("mean")
+```
+```{r}
+clusplot(scaled_numeric,final_analysis$cluster, color=T,
+         labels = 2, lines = 0)
+```
+
+# b. Interpret the clusters wrt the numeric variables used in forming these clusters.
+Cluster 1 - AHM,SGP,WYE,BMY,AZN, ABT, NVS, LLY
+Cluster 2 - BAY, CHTT, IVX
+Cluster 3 - AGN, PHA
+Cluster 4 - JNJ, MRK, PFE,GSK
+Cluster 5 - WPI, MRX,ELN,AVE
+
+```{r}
+cluster_interpretation <- data[,c(12,13,14)] %>% 
+  mutate(clusters = final_analysis$cluster) %>%
+  arrange(clusters, ascending = T)
+print(cluster_interpretation)
+```
+# c. Pattern wrt to numerical variables 10 to 12.
+```{r}
+a1 <- ggplot(cluster_interpretation, 
+                    mapping = aes(factor(clusters),
+                    fill = Median_Recommendation))+
+            geom_bar(position = "dodge")+labs(x="Number of clusters")
+a2 <- ggplot(cluster_interpretation, 
+                    mapping = aes(factor(clusters),
+                    fill = Location))+
+            geom_bar(position = "dodge")+labs(x="Number of clusters")
+a3 <- ggplot(cluster_interpretation, 
+                    mapping = aes(factor(clusters),
+                    fill = Exchange))+
+            geom_bar(position = "dodge")+labs(x="Number of clusters")
+grid.arrange(a1,a2,a3)
+```
+**As per the graph above, the patterns suggest the following recommendations**
+
+**Cluster 1 suggests to Hold.**
+
+**Cluster 2 also suggests mostly to hold.**
+
+**Cluster 3 suggests to both Hold/Moderate Buy.**
+
+**Cluster 4 suggests to both Hold/Moderate Buy.**
+
+**Cluster 5 suggests to both Moderate Buy/Moderate Sell.**
+
+
+# d. Providing appropriate name for the clusters.
+
+**Cluster 1 = Investment Cluster.**
+
+**Cluster 2 = Tight Cluster.**
+
+**Cluster 3 = Purchase Cluster.**
+
+**Cluster 4 = Scrutinizing Cluster.**
+
+**Cluster 5 = Examination Cluster.**
+
+
+
+
+
